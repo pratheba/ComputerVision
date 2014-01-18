@@ -575,7 +575,7 @@ void MainWindow::FirstDerivImage(QImage *image, double sigma)
 
 #pragma region SecondDerivativeImage
 
-void SetFirstDerivativePixelIinYToImage(QImage& image,double** temporaryRowArray, int colPixel, int height) {
+void SetSecondDerivativePixelIinYToImage(QImage& image,double** temporaryRowArray, int colPixel, int height) {
       for(int rowPixel = 0; rowPixel < height ; rowPixel++) {
             image.setPixel(colPixel,rowPixel,qRgb((int) floor(temporaryRowArray[rowPixel][0] + 128), 
                 (int) floor(temporaryRowArray[rowPixel][1] + 128), (int) floor(temporaryRowArray[rowPixel][2] + 128)));
@@ -586,7 +586,7 @@ void SetFirstDerivativePixelIinYToImage(QImage& image,double** temporaryRowArray
       }
 }
 
-void GetIntensityDifferenceBetweenneighbourPixelsinYDirection(const QImage& OutPutImageBuffer,double** temporaryRowArray, int radius, int colPixel) {
+void GetSecondOrderDiffOfPixelsinYDirection(const QImage& OutPutImageBuffer,double** temporaryRowArray, int radius, int colPixel) {
     QRgb pixel;
 
     for(int rowPixel = radius; rowPixel < OutPutImageBuffer.height() - radius; rowPixel++) {
@@ -597,12 +597,64 @@ void GetIntensityDifferenceBetweenneighbourPixelsinYDirection(const QImage& OutP
             // for( int pos = -radius; pos <= radius; pos++) 
             //      intensityDifference += OutPutImageBuffer.pixel(colPixel+pos) * XDerivativeFilter (pos+radius); 
            
-            pixel = OutPutImageBuffer.pixel(colPixel,rowPixel + 1) - OutPutImageBuffer.pixel(colPixel, rowPixel-1);
+        pixel = OutPutImageBuffer.pixel(colPixel,rowPixel + 1) + OutPutImageBuffer.pixel(colPixel, rowPixel-1) - 2*OutPutImageBuffer.pixel(colPixel,rowPixel);
             temporaryRowArray[rowPixel-radius][0] = qRed(pixel);
             temporaryRowArray[rowPixel-radius][1] = qGreen(pixel);
             temporaryRowArray[rowPixel-radius][2] = qBlue(pixel);
         }
 
+}
+
+void ApplySecondDerivativeinYDirectionToImage(QImage& OutPutImageBuffer,QImage& image,const int radius) {
+
+    QRgb pixel;
+
+    int width                       =   image.width();
+    int height                      =   image.height();
+    double** temporaryRowArray      =   new double*[height]();
+
+    for(int i = 0; i < height ; i++) 
+        temporaryRowArray[i] = new double[3];
+    
+    ResetValues(NULL, temporaryRowArray, height);
+
+    for(int colPixel = radius; colPixel < width+radius; colPixel++) {
+        GetSecondOrderDiffOfPixelsinYDirection(OutPutImageBuffer,temporaryRowArray, radius, colPixel);
+        SetSecondDerivativePixelIinYToImage(image, temporaryRowArray, colPixel - radius, height);
+    }
+
+     for(int i = 0; i < height ; i++) 
+        delete[] temporaryRowArray[i];
+}
+
+void GetSecondOrderDiffOfPixelsinXDirection(const QImage& OutPutImageBuffer,double** temporaryRowArray, int radius, int rowPixel) {
+    QRgb pixel;
+
+    for(int colPixel = radius; colPixel < OutPutImageBuffer.width() - radius; colPixel++) {
+
+            // If we want to include the differentiation filter size > 3
+            // double intensityDifference = 0.0;
+            // int XDerivativeFilter[2*radius];// = {-1, 0, 1};
+            // for( int pos = -radius; pos <= radius; pos++) 
+            //      intensityDifference += OutPutImageBuffer.pixel(colPixel+pos) * XDerivativeFilter (pos+radius); 
+           
+            pixel = OutPutImageBuffer.pixel(colPixel+1,rowPixel) + OutPutImageBuffer.pixel(colPixel -1, rowPixel) - 2*OutPutImageBuffer.pixel(colPixel,rowPixel);
+            temporaryRowArray[colPixel-radius][0] = qRed(pixel);
+            temporaryRowArray[colPixel-radius][1] = qGreen(pixel);
+            temporaryRowArray[colPixel-radius][2] = qBlue(pixel);
+        }
+
+}
+
+void SetSecondDerivativePixelIinXToImage(QImage& image,double** temporaryRowArray, int rowPixel, int width) {
+      for(int colPixel = 0; colPixel < width ; colPixel++) {
+            image.setPixel(colPixel,rowPixel,qRgb((int) floor(temporaryRowArray[colPixel][0] + 128), 
+                (int) floor(temporaryRowArray[colPixel][1] + 128), (int) floor(temporaryRowArray[colPixel][2] + 128)));
+
+            temporaryRowArray[colPixel][0] = 0.0;
+            temporaryRowArray[colPixel][1] = 0.0;
+            temporaryRowArray[colPixel][2] = 0.0;
+      }
 }
 
 void ApplySecondDerivativeinXDirectionToImage(QImage& OutPutImageBuffer,QImage& image,const int radius) {
@@ -611,41 +663,19 @@ void ApplySecondDerivativeinXDirectionToImage(QImage& OutPutImageBuffer,QImage& 
 
     int width                       =   image.width();
     int height                      =   image.height();
-    double** temporaryRowArray      =   new double*[height]();
+    double** temporaryRowArray      =   new double*[width]();
 
-    for(int i = 0; i < height ; i++) 
+    for(int i = 0; i < width ; i++) 
         temporaryRowArray[i] = new double[3];
     
-    ResetValues(NULL, temporaryRowArray, height);
+    ResetValues(NULL, temporaryRowArray, width);
 
-    for(int colPixel = radius; colPixel < width+radius; colPixel++) {
-        GetIntensityDifferenceBetweenneighbourPixelsinXDirection(OutPutImageBuffer,temporaryRowArray, radius, colPixel);
-        SetFirstDerivativePixelIinYToImage(image, temporaryRowArray, colPixel - radius, height);
+    for(int rowPixel = radius; rowPixel < height+radius; rowPixel++) {
+        GetSecondOrderDiffOfPixelsinXDirection(OutPutImageBuffer,temporaryRowArray, radius, rowPixel);
+        SetSecondDerivativePixelIinXToImage(image, temporaryRowArray, rowPixel - radius, width);
     }
 
-     for(int i = 0; i < height ; i++) 
-        delete[] temporaryRowArray[i];
-}
-
-void ApplyFirstDerivativeinYDirectionToImage(QImage& OutPutImageBuffer,QImage& image,const int radius) {
-
-    QRgb pixel;
-
-    int width                       =   image.width();
-    int height                      =   image.height();
-    double** temporaryRowArray      =   new double*[height]();
-
-    for(int i = 0; i < height ; i++) 
-        temporaryRowArray[i] = new double[3];
-    
-    ResetValues(NULL, temporaryRowArray, height);
-
-    for(int colPixel = radius; colPixel < width+radius; colPixel++) {
-        GetIntensityDifferenceBetweenneighbourPixelsinYDirection(OutPutImageBuffer,temporaryRowArray, radius, colPixel);
-        SetFirstDerivativePixelIinYToImage(image, temporaryRowArray, colPixel - radius, height);
-    }
-
-     for(int i = 0; i < height ; i++) 
+     for(int i = 0; i < width ; i++) 
         delete[] temporaryRowArray[i];
 }
 
@@ -674,8 +704,8 @@ void LaplacianOfGaussian(QImage& image,  const QImage& FirstDerivativeImage, con
             temporaryColorBuffer[1] = qGreen(pixelFirstDerivImage) + qGreen(pixelSecondDerivImage);
             temporaryColorBuffer[2] = qBlue(pixelFirstDerivImage) + qBlue(pixelSecondDerivImage);
 
-             image.setPixel(colPixel,rowPixel,qRgb((int) floor(temporaryColorBuffer[0] + 0.5), 
-                (int) floor(temporaryColorBuffer[1] + 0.5), (int) floor(temporaryColorBuffer[2] + 0.5)));
+             image.setPixel(colPixel,rowPixel,qRgb((int) floor(temporaryColorBuffer[0] + 128), 
+                (int) floor(temporaryColorBuffer[1] + 128), (int) floor(temporaryColorBuffer[2] + 128)));
 
              ResetValues(temporaryColorBuffer, NULL, 0);
         }
@@ -684,6 +714,8 @@ void LaplacianOfGaussian(QImage& image,  const QImage& FirstDerivativeImage, con
     delete[] temporaryColorBuffer;
 }
 
+// This is implemented with 3x3 Laplacian operator.
+// Change to dynamic filter
 void MainWindow::SecondDerivImage(QImage *image, double sigma)
 {
     QImage FirstDerivativeImage, SecondDerivativeImage ;
@@ -694,23 +726,15 @@ void MainWindow::SecondDerivImage(QImage *image, double sigma)
     SecondDerivativeImage = ReplicateImage(image);
 
     QImage OutputImageBuffer        =       InitializeOutputImageBuffer(image,sigma,metaData);
-    ApplyFirstDerivativeinXDirectionToImage(OutputImageBuffer, FirstDerivativeImage,metaData.radius); 
-    //SeparableGaussianBlurImage(&FirstDerivativeImage,sigma);
-    InitializeOutputImageBuffer(&FirstDerivativeImage,sigma,metaData);
-    ApplyFirstDerivativeinXDirectionToImage(OutputImageBuffer, FirstDerivativeImage,metaData.radius); 
+    ApplySecondDerivativeinXDirectionToImage(OutputImageBuffer, FirstDerivativeImage,metaData.radius); 
     SeparableGaussianBlurImage(&FirstDerivativeImage,sigma);
-
+    
     OutputImageBuffer               =       InitializeOutputImageBuffer(image,sigma,metaData);
-    ApplyFirstDerivativeinYDirectionToImage(OutputImageBuffer, SecondDerivativeImage,metaData.radius); 
-    //SeparableGaussianBlurImage(&SecondDerivativeImage,sigma);
-    InitializeOutputImageBuffer(&SecondDerivativeImage,sigma,metaData);
-    ApplyFirstDerivativeinYDirectionToImage(OutputImageBuffer, SecondDerivativeImage,metaData.radius);  
+    ApplySecondDerivativeinYDirectionToImage(OutputImageBuffer, SecondDerivativeImage,metaData.radius); 
     SeparableGaussianBlurImage(&SecondDerivativeImage,sigma);
-
+ 
     LaplacianOfGaussian(*image, FirstDerivativeImage, SecondDerivativeImage, metaData);
 
-   /* delete FirstDerivativeImage;
-    delete SecondDerivativeImage;*/
 }
 
 #pragma endregion SecondDerivativeImage
@@ -739,8 +763,8 @@ void ApplySubtractionFilterToImage(QImage *image, QImage* derivativeImage, doubl
             imageRGB[1] = min(255.0, max(0.0, imageRGB[1]));
             imageRGB[2] = min(255.0, max(0.0, imageRGB[2]));*/
 
-            image->setPixel(colPixel, rowPixel, qRgb((int) floor(imageRGB[0]+ 128 ), 
-                (int) floor(imageRGB[1]+128 ), (int) floor(imageRGB[2] +128)));
+            image->setPixel(colPixel, rowPixel, qRgb((int) floor(imageRGB[0] + 128), 
+                (int) floor(imageRGB[1] + 128), (int) floor(imageRGB[2] + 128)));
 
             ResetValues(imageRGB, NULL, 0);
         }

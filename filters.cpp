@@ -821,20 +821,17 @@ void ApplySubtractionFilterToImage(QImage *image, QImage* derivativeImage, doubl
         for(int colPixel = 0; colPixel < width; colPixel++) {
             imagepixel =  image->pixel(colPixel,rowPixel);
             derivativePixel = derivativeImage->pixel(colPixel,rowPixel);
-            imageRGB[0] = (double)(qRed(imagepixel)      - (alpha * (double)(qRed(derivativePixel))));
-            imageRGB[1] = (double)(qGreen(imagepixel)    - (alpha * (double)(qGreen(derivativePixel))));
-            imageRGB[2] = (double)(qBlue(imagepixel)     - (alpha * (double)(qBlue(derivativePixel))));
+            imageRGB[0] = (double)(qRed(imagepixel)      - (alpha * (double)(qRed(derivativePixel) - 128)));
+            imageRGB[1] = (double)(qGreen(imagepixel)    - (alpha * (double)(qGreen(derivativePixel) - 128)));
+            imageRGB[2] = (double)(qBlue(imagepixel)     - (alpha * (double)(qBlue(derivativePixel)-128)));
 
-            /*imageRGB[0] = min(255.0, max(0.0, imageRGB[0]));
-            imageRGB[1] = min(255.0, max(0.0, imageRGB[1]));
-            imageRGB[2] = min(255.0, max(0.0, imageRGB[2]));*/
-               /* imageRGB[0] = min(255.0, max(0.0, imageRGB[0]+128));
-                imageRGB[1] = min(255.0, max(0.0, imageRGB[1]+128));
-                imageRGB[2] = min(255.0, max(0.0, imageRGB[2]+128));
-               */
+                imageRGB[0] = min(255.0, max(0.0, imageRGB[0]));
+                imageRGB[1] = min(255.0, max(0.0, imageRGB[1]));
+                imageRGB[2] = min(255.0, max(0.0, imageRGB[2]));
+               
 
-            image->setPixel(colPixel, rowPixel, qRgb((int) floor(imageRGB[0] +128), 
-                (int) floor(imageRGB[1] +128), (int) floor(imageRGB[2] +128)));
+            image->setPixel(colPixel, rowPixel, qRgb((int) floor(imageRGB[0] ), 
+                (int) floor(imageRGB[1] ), (int) floor(imageRGB[2] )));
 
             ResetValues(imageRGB, NULL, 0);
         }
@@ -1178,10 +1175,10 @@ void GetNonMaximumSupression(QImage* image, double row, double col, int rowPixel
      double* E0imageRGB;
       double* E1imageRGB;
        
-    if( colPixel < 0 || rowPixel < 0 || colPixel > (image->width() -1) || rowPixel > (image->height() -1)) {
+    /*if( colPixel < 0 || rowPixel < 0 || colPixel > (image->width() -1) || rowPixel > (image->height() -1)) {
         rgb[0] = 0; rgb[1] =0; rgb[2]=0; 
         return;
-    }
+    }*/
 
     GetNeighbouringPixelPositionAndWeight(image, colPixel + col, rowPixel + row, position, pixelWeight);
     E0imageRGB = GetPixelValueByInterpolation(colPixel + col, rowPixel + row, pixelWeight);
@@ -1189,7 +1186,7 @@ void GetNonMaximumSupression(QImage* image, double row, double col, int rowPixel
      GetNeighbouringPixelPositionAndWeight(image, colPixel -col, rowPixel -row, position, pixelWeight);
      E1imageRGB = GetPixelValueByInterpolation(colPixel-col, rowPixel-row, pixelWeight);
 
-     double E0magnitude = (E0imageRGB[0]+E0imageRGB[1]+E0imageRGB[2])/3;
+    double E0magnitude = (E0imageRGB[0]+E0imageRGB[1]+E0imageRGB[2])/3;
     double E1magnitude = (E1imageRGB[0]+E1imageRGB[1]+E1imageRGB[2])/3;
    
     if((*magnitude > E0magnitude) && (*magnitude > E1magnitude) && (*magnitude > thres))
@@ -1224,9 +1221,7 @@ void findPeaksSobel(const ImageMetaData& metaData, QImage* inputImage, QImage& o
     for(int rowPixel = 0; rowPixel < metaData.Height; rowPixel++) { // X
         for(int colPixel = 0; colPixel < metaData.Width; colPixel++) { // Y
 
-            double red = 0.0;
-             double green = 0.0;
-             double blue = 0.0;
+           
 
             ResetValues(imageRGB, tempStorageHorizConvolution, kernel.KernelSize);
             ApplyHorizontalFilterToPixelAndReturnRGB(outputImageBuffer, tempStorageHorizConvolution, XKernel, Position(rowPixel,colPixel),radius);
@@ -1257,7 +1252,7 @@ void findPeaksSobel(const ImageMetaData& metaData, QImage* inputImage, QImage& o
 
             orient = atan2( Gy , Gx );
 
-            double value = Gx + Gy;
+           // double value = Gx + Gy;
            /* double red = (sin(orient) + 1.0)/2.0;
             double green = (cos(orient) + 1.0)/2.0;
             double blue = 1.0 - red - green;*/
@@ -1276,23 +1271,23 @@ void findPeaksSobel(const ImageMetaData& metaData, QImage* inputImage, QImage& o
             if(orient >= 0 && orient <=45)
                 orientation[rowPixel][colPixel] = 0;
             else if(orient > 45 && orient <= 90)
-                orientation[rowPixel][colPixel] = 90;
+                orientation[rowPixel][colPixel] = 45;
             else if(orient > 90 && orient <= 135)
-                orientation[rowPixel][colPixel] = 135;
+                orientation[rowPixel][colPixel] = 90;
             else if(orient > 135 && orient <= 180)
-                orientation[rowPixel][colPixel] = 180;
+                orientation[rowPixel][colPixel] = 135;
 
-             //double red = mag;//*4.0;
-             //double green = mag;//*4.0;
-             //double blue = mag;//*4.0;
+             double red = mag*4.0;
+             double green = mag*4.0;
+             double blue = mag*4.0;
 
     // Make sure the pixel values range from 0 to 255
             red = min(255.0, max(0.0, red));
             green = min(255.0, max(0.0, green));
             blue = min(255.0, max(0.0, blue));
 
-    //inputImage->setPixel(colPixel, rowPixel, qRgb( (int) (red), (int) (green), (int) (blue)));
-     inputImage->setPixel(colPixel, rowPixel, qRgb( (int) (value), (int) (value), (int) (value)));
+    inputImage->setPixel(colPixel, rowPixel, qRgb( (int) (red), (int) (green), (int) (blue)));
+     //inputImage->setPixel(colPixel, rowPixel, qRgb( (int) (value), (int) (value), (int) (value)));
 
 
         }    
@@ -1303,7 +1298,6 @@ void findPeaksSobel(const ImageMetaData& metaData, QImage* inputImage, QImage& o
     for(int i=0; i< kernel.KernelSize ; i++)
         delete tempStorageHorizConvolution[i];
 
-    bool isEdge = false;
 
      for(int rowPixel = 0; rowPixel < metaData.Height; rowPixel++) { // X
         for(int colPixel = 0; colPixel < metaData.Width; colPixel++) { // Y
@@ -1321,6 +1315,9 @@ void findPeaksSobel(const ImageMetaData& metaData, QImage* inputImage, QImage& o
             case 135:
                 GetNonMaximumSupression(inputImage,(double)-1/(double)sqrtf(2),(double)-1/(double)sqrtf(2), rowPixel, colPixel, &magnitude[rowPixel][colPixel], thres);
                 break;
+            default:
+                inputImage->setPixel(colPixel, rowPixel, qRgb(0,0,0));
+                break;
             }
             
         }
@@ -1328,8 +1325,10 @@ void findPeaksSobel(const ImageMetaData& metaData, QImage* inputImage, QImage& o
 
       for(int rowPixel = 0; rowPixel < metaData.Height; rowPixel++) { // X
         for(int colPixel = 0; colPixel < metaData.Width; colPixel++) { // Y
-            int value = magnitude[rowPixel][colPixel];
-            inputImage->setPixel(colPixel, rowPixel, qRgb(value, value, value));
+            if(magnitude[rowPixel][colPixel] == 255)
+                inputImage->setPixel(colPixel, rowPixel, qRgb(255,255,255));
+            else
+                inputImage->setPixel(colPixel, rowPixel, qRgb(0,0,0));
         }
       }
 }

@@ -177,6 +177,7 @@ void MainWindow::HalfImage(QImage &image)
 }
 
 #pragma region Utility
+
 struct ImageMetaData {
     int Width;
     int Height;
@@ -184,6 +185,15 @@ struct ImageMetaData {
     ImageMetaData():Width(0),Height(0),radius(0){}
     ImageMetaData(int width_, int height_, int radius_):Width(width_),Height(height_),radius(radius_){}
     ImageMetaData(const ImageMetaData& metaData):Width(metaData.Width),Height(metaData.Height),radius(metaData.radius){}
+};
+
+struct Position {
+    int XPixelPos;
+    int YPixelPos;
+
+    Position():XPixelPos(-1), YPixelPos(-1){}
+    Position(int X, int Y):XPixelPos(X), YPixelPos(Y){}
+    Position(const Position& position_):XPixelPos(position_.XPixelPos), YPixelPos(position_.YPixelPos){}
 };
 
 void ResetValues(double* imageRGB, double** tempStorageHorizConvolution, int size ) {
@@ -201,7 +211,6 @@ void ResetValues(double* imageRGB, double** tempStorageHorizConvolution, int siz
     }
 }
 
-
 QImage InitializeOutputImageBuffer(const QImage* image, double sigma, ImageMetaData& metaData)
 {
     metaData.radius            =   (int)(3*sigma);
@@ -213,30 +222,38 @@ QImage InitializeOutputImageBuffer(const QImage* image, double sigma, ImageMetaD
         metaData.Width + 2*metaData.radius, metaData.Height + 2*metaData.radius);
     return (GaussImagebuffer);
 }
+
+int GetPixelPositionForEdges(int currentPixel, int edgesize) {
+    if(currentPixel < 0)
+        return abs(currentPixel);
+    else if(currentPixel > (edgesize))
+        return abs(edgesize-(currentPixel - edgesize));
+    else
+        return edgesize;
+} 
+
+void GetPixelWeight(QImage* image, const Position& pixelPosition, double* pixelWeight) {
+
+    int edgePixelCol = pixelPosition.YPixelPos;
+    int edgePixelRow = pixelPosition.XPixelPos;
+
+    if((edgePixelCol) < 0 || (edgePixelCol)> (image->width()-1))
+        edgePixelCol = GetPixelPositionForEdges(edgePixelCol,image->width()-1);
+    if((edgePixelRow) < 0 || (edgePixelRow)> (image->height()-1)) 
+        edgePixelRow = GetPixelPositionForEdges(edgePixelRow,image->height()-1);
+                 
+
+    QRgb pixel =  image->pixel(edgePixelCol, edgePixelRow);
+         
+    pixelWeight[0] = qRed(pixel);
+    pixelWeight[1] = qGreen(pixel);
+    pixelWeight[2] = qBlue(pixel);
+}
+
 #pragma endregion Utility
 
 /////////////////////////////////////////////// GAUSSIAN BLUR ///////////////////////////////////////////////////
 #pragma region GaussianBlurImage
-
-//struct GaussBlurImage {
-//	QImage* GaussImageBuffer;
-//    double* GaussianKernel;
-//
-//    GaussBlurImage():GaussianKernel(NULL),GaussImageBuffer(NULL){}
-//	GaussBlurImage(const GaussImage& GaussImage_): GaussImageBuffer(GaussImage_.GaussImageBuffer){}
-//    GaussBlurImage(QImage* GaussImageBuffer_):GaussImageBuffer(GaussImageBuffer_){}
-//};
-
-
-
-struct Position {
-    int XPixelPos;
-    int YPixelPos;
-
-    Position():XPixelPos(-1), YPixelPos(-1){}
-    Position(int X, int Y):XPixelPos(X), YPixelPos(Y){}
-    Position(const Position& position_):XPixelPos(position_.XPixelPos), YPixelPos(position_.YPixelPos){}
-};
 
 
 
@@ -323,7 +340,7 @@ void ConvolveImagewithGaussianKernel(const ImageMetaData& metaData, QImage* inpu
 
             ResetValues(imageRGB,NULL,0);
              for(int row = -radius; row <= radius; ++row) {
-        for(int col = -radius; col <= radius; ++col) {
+                for(int col = -radius; col <= radius; ++col) {
 
             pixel           =   outputImageBuffer.pixel(colPixel + col + radius, rowPixel + row + radius);
             double  weight  =   kernel.Kernel[(row + radius)* kernel.KernelSize + (col + radius)];
@@ -397,72 +414,6 @@ void GetSeperableGaussianKernel(const int radius,GaussianKernel& gaussianKernel)
     InitializeSeperableGaussianKernel(radius, gaussianKernel);
     LoadvaluesOfSeperablekernelComponents(radius, gaussianKernel);
     NormalizeSeperableKernel(gaussianKernel);
-}
-
-//typedef double* (*callback_function)(const QImage&,const GaussianKernel&, Position,int ); // type for conciseness
-
-//void ApplyVerticalFilterToPixelAndReturnRGB(double* imageRGB, double** tempStorageHorizConvolution, const GaussianKernel& kernel, int radius ) {
-//    
-//    for(int pos = -radius; pos <= radius; pos++) {
-//        imageRGB[0] += (tempStorageHorizConvolution[pos+radius][0] )*kernel.Kernel[pos + radius];
-//        imageRGB[1] += (tempStorageHorizConvolution[pos+radius][1] )*kernel.Kernel[pos + radius];
-//        imageRGB[2] += (tempStorageHorizConvolution[pos+radius][2] )*kernel.Kernel[pos + radius];
-//    }
-//}
-
-//void ApplyHorizontalFilterToPixelAndReturnRGB(const QImage& outputImageBuffer,double** tempStorageHorizConvolution,const GaussianKernel& kernel, Position position, int radius) {
-//    QRgb pixel;
-//
-//    for(int row = -radius; row <= radius; ++row) 
-//        for(int col = -radius; col <= radius; ++col) {
-//            pixel           =   outputImageBuffer.pixel(position.YPixelPos + col + radius,position.XPixelPos +row + radius); 
-//            double  weight  =   kernel.Kernel[col + radius];
-//            
-//            tempStorageHorizConvolution[row+radius][0]     +=  weight*(double) qRed(pixel);
-//            tempStorageHorizConvolution[row+radius][1]     +=  weight*(double) qGreen(pixel);
-//            tempStorageHorizConvolution[row+radius][2]     +=  weight*(double) qBlue(pixel);
-//        }    
-//}
-
-//double* ApplyFilterToPixelSeperableAndReturnRGB(const ImageMetaData& metaData, callback_function sample, Position position, const QImage& outputImageBuffer, const GaussianKernel& kernel)
-//{
-//    int radius                = metaData.radius;
-//    double* imageRGB          = new double[3]();
-//    QRgb pixel;
-//
-//    for(int row = -radius; row <= radius; ++row) {
-//       for(int col = -radius; col <= radius; ++col) {
-//            //pixel           =   sample()
-//            //pixel           =   outputImageBuffer.pixel(position.YPixelPos + col + radius, position.XPixelPos + row + radius);
-//            double  weight  =   kernel.Kernel[col + radius];
-//
-//            imageRGB[0]     +=  weight*(double) qRed(pixel);
-//            imageRGB[1]     +=  weight*(double) qGreen(pixel);
-//            imageRGB[2]     +=  weight*(double) qBlue(pixel);
-//        }
-//
-//    }
-//      
-//    //for(int pos = -radius; pos <= radius; ++pos) {
-//    //        pixel           =   sample(outputImageBuffer, position, radius, pos );//outputImageBuffer.pixel(position.YPixelPos , position.XPixelPos + pos + radius);
-//    //        double  weight  =   kernel.Kernel[pos + radius];
-//
-//    //        imageRGB[0]     +=  weight*(double) qRed(pixel);
-//    //        imageRGB[1]     +=  weight*(double) qGreen(pixel);
-//    //        imageRGB[2]     +=  weight*(double) qBlue(pixel);
-//    //    }
-//        return imageRGB;
-//}
-
-
-
-// Reflected pixel
-// edgeSize is either width or height of image (minus) 1 
-int GetPixelPositionForEdges(int currentPixel, int edgesize) {
-    if(currentPixel < 0)
-        return abs(currentPixel);
-    else if(currentPixel > (edgesize))
-        return abs(edgesize-(currentPixel - edgesize));
 }
 
 void  ApplyVerticalFilterToPixel(QImage* inputImage, QImage* tempImage,const ImageMetaData& metaData,const GaussianKernel& kernel ) {
@@ -893,7 +844,6 @@ struct SobelImagePixel {
     SobelImagePixel(double magnitude_, double orientation_):magnitude(magnitude_), orientation(orientation_){}
 };
 
-
 void GetSobelKernel(SobelKernel& sobelKernel) {
 
     InitializeSobelKernel(sobelKernel);
@@ -923,69 +873,78 @@ void ApplyHorizontalFilterToPixelAndReturnRGB(const QImage& outputImageBuffer,do
         }    
 }
 
-void ApplySobelFilterToImage(const ImageMetaData& metaData, QImage* inputImage, QImage& outputImageBuffer,SobelKernel& kernel) {
+void ApplySobelFilterToImage(const ImageMetaData& metaData, QImage* inputImage,SobelKernel& kernel) {
    
     double* imageRGB                        =   new double[3]();
     int radius                              =   metaData.radius;
-    double** tempStorageHorizConvolution    =   new double*[kernel.KernelSize]();
+    double* tempStorageHorizConvolution    =   new double[kernel.KernelSize]();
+     double Gx, Gy, mag, orient;
 
-    double XKernel[3] = {1, 0, -1};
-    double Ykernel[3] = {1, 2, 1};
+    double XKernel[3][3] = {{-1,0,1},{-2,0,2},{-1,0,1}};
+    double YKernel[3][3] = {{-1, -2, -1}, {0,0,0},{1, 2, 1}};
 
-   
-
-    double Gx, Gy, mag, orient;
-
-    for(int i=0; i<kernel.KernelSize; i++) 
-        tempStorageHorizConvolution[i] = new double[3];
-    
+    QImage tempImage = inputImage->copy(); 
+    QRgb pixel;
 
     for(int rowPixel = 0; rowPixel < metaData.Height; rowPixel++) { // X
         for(int colPixel = 0; colPixel < metaData.Width; colPixel++) { // Y
+            pixel = inputImage->pixel(colPixel, rowPixel);
+            int grayScale = qGray(pixel);
+            tempImage.setPixel(colPixel, rowPixel, qRgb((int)floor(grayScale), (int)floor(grayScale), (int)floor(grayScale)));
+        }
+    }
 
-            ResetValues(imageRGB, tempStorageHorizConvolution, kernel.KernelSize);
-            ApplyHorizontalFilterToPixelAndReturnRGB(outputImageBuffer, tempStorageHorizConvolution, XKernel, Position(rowPixel,colPixel),radius);
-            ApplyVerticalFilterToPixelAndReturnRGB(imageRGB, tempStorageHorizConvolution, Ykernel, radius);
+    int rowEdgePixel, colEdgePixel;
 
-            Gx = (double) floor(imageRGB[0] + imageRGB[1] + imageRGB[2]);
-                Gx = Gx/(double)3;
+      for(int rowPixel = 0; rowPixel < metaData.Height; rowPixel++) { // X
+        for(int colPixel = 0; colPixel < metaData.Width; colPixel++) { // Y
 
-            ResetValues(imageRGB, tempStorageHorizConvolution, kernel.KernelSize);
-            ApplyHorizontalFilterToPixelAndReturnRGB(outputImageBuffer, tempStorageHorizConvolution, Ykernel, Position(rowPixel,colPixel),radius);
-            ApplyVerticalFilterToPixelAndReturnRGB(imageRGB, tempStorageHorizConvolution, XKernel, radius);
+            Gx = 0.0; Gy = 0.0;
 
-                Gy = (double) floor(imageRGB[0] + imageRGB[1] + imageRGB[2]);
-                Gy = Gy / (double)3;
+            for(int row = -1; row < 2; row++) {
+                 rowEdgePixel = rowPixel + row;
+                 if((rowEdgePixel) < 0 || (rowEdgePixel) > (metaData.Height-1))
+                     rowEdgePixel = GetPixelPositionForEdges(rowEdgePixel,metaData.Height-1);
 
-             
-                mag = sqrt(Gx*Gx + Gy*Gy);
-                orient = atan2( Gy , Gx );
-               
+                for(int col = -1; col < 2; col++) {
 
-            double red = (sin(orient) + 1.0)/2.0;
+                    colEdgePixel = colPixel + col;              
+                    if((colEdgePixel) < 0 || (colEdgePixel) > (metaData.Width-1)) 
+                        colEdgePixel = GetPixelPositionForEdges(colEdgePixel,metaData.Width-1);
+                    
+                    pixel = tempImage.pixel(colEdgePixel, rowEdgePixel);
+                    
+                    double weight = XKernel[row+1][col+1];
+                    Gx += (double)(qRed(pixel)) * weight;
+                    
+                    weight = YKernel[row+1][col+1];
+                    Gy += (double)(qRed(pixel)) * weight;
+                }
+            }
+            
+            mag = sqrt(Gx * Gx + Gy * Gy);
+            orient = atan2f(Gy, Gx);
+          
+             double red = (sin(orient) + 1.0)/2.0;
              double green = (cos(orient) + 1.0)/2.0;
              double blue = 1.0 - red - green;
-             
-             red *= mag*4.0;
-             green *= mag*4.0;
-             blue *= mag*4.0;
+            
+             red *= mag * 4;
+              green *= mag * 4;
+              blue *=  mag * 4;
 
-    // Make sure the pixel values range from 0 to 255
-    red = min(255.0, max(0.0, red));
-    green = min(255.0, max(0.0, green));
-    blue = min(255.0, max(0.0, blue));
+            // Make sure the pixel values range from 0 to 255
+            red = min(255.0, max(0.0, red));
+            green = min(255.0, max(0.0, green));
+            blue = min(255.0, max(0.0, blue));
 
-    inputImage->setPixel(colPixel, rowPixel, qRgb( (int) (red), (int) (green), (int) (blue)));
-
-           
-        }    } 
-    
-    delete imageRGB;
-    imageRGB = NULL;
-    
-    for(int i=0; i< kernel.KernelSize ; i++)
-        delete tempStorageHorizConvolution[i];
+ 
+            inputImage->setPixel(colPixel, rowPixel, qRgb((int) floor(red), 
+                        (int) floor(green), (int) floor(blue)));
+        }
+      }
 }
+
 void MainWindow::SobelImage(QImage *image)
 {
 
@@ -994,14 +953,15 @@ void MainWindow::SobelImage(QImage *image)
     double YSobelKernel[3][3] = {{1,2,1},{0,0,0},{-1,-2,-1}};
 
     double sigma = double(1) / double(3);
-
-    ImageMetaData metaData(0,0,0); 
+    ImageMetaData metaData(0,0,0);
     SobelKernel sobelKernel(0,NULL,NULL);
-     GaussianKernel gaussianKernel(0,(double)1/(double)3,NULL);
-   
-    QImage OutPutImageBuffer        =       InitializeOutputImageBuffer(image,sigma,metaData);
+  
+    metaData.Height = image->height();
+    metaData.Width = image->width();
+    metaData.radius = 1;
+
     GetSobelKernel(sobelKernel);
-    ApplySobelFilterToImage(metaData, image, OutPutImageBuffer, sobelKernel);
+    ApplySobelFilterToImage(metaData, image, sobelKernel);
 
     /***********************************************************************
       When displaying the orientation image I
@@ -1028,27 +988,10 @@ void MainWindow::SobelImage(QImage *image)
     ************************************************************************/
 }
 
-void GetPixelWeight(QImage* image, const Position& pixelPosition, double* pixelWeight) {
-
-    int edgePixelCol = pixelPosition.YPixelPos;
-    int edgePixelRow = pixelPosition.XPixelPos;
-
-    if((edgePixelCol) < 0 || (edgePixelCol)> (image->width()-1))
-        edgePixelCol = GetPixelPositionForEdges(edgePixelCol,image->width()-1);
-    if((edgePixelRow) < 0 || (edgePixelRow)> (image->height()-1)) 
-        edgePixelRow = GetPixelPositionForEdges(edgePixelRow,image->height()-1);
-                 
-
-    QRgb pixel =  image->pixel(edgePixelCol, edgePixelRow);
-         
-    pixelWeight[0] = qRed(pixel);
-    pixelWeight[1] = qGreen(pixel);
-    pixelWeight[2] = qBlue(pixel);
-}
 
 void GetNeighbouringPixelPositionAndWeight(QImage *image, double colPixel, double rowPixel, Position* position, double** pixelWeight) {
-    int colPixel1 = (int) (floor(colPixel));
-    int rowPixel1 = (int) (floor(rowPixel));
+    int colPixel1 = (int) ((colPixel));
+    int rowPixel1 = (int) ((rowPixel));
 
     position[0] = Position(rowPixel1,colPixel1);
     GetPixelWeight(image, Position(rowPixel1,colPixel1), pixelWeight[0]);
@@ -1074,7 +1017,7 @@ double* GetIntermediatePixelValueByInterpolation(double influenceOfPixel1, doubl
     return imageRGB;
 }
 
-double* GetPixelValueByInterpolation(double colPixel, double rowPixel, double** pixelWeight) {
+void GetPixelValueByInterpolation(double colPixel, double rowPixel, double** pixelWeight, double rgb[3]) {
     int colPixel1 = (int) (floor(colPixel));
     int rowPixel1 = (int) (floor(rowPixel));
 
@@ -1091,7 +1034,9 @@ double* GetPixelValueByInterpolation(double colPixel, double rowPixel, double** 
 
     double* XY =  GetIntermediatePixelValueByInterpolation(influenceOfPixelY1, influenceOfPixelY2, XY1, XY2);
 
-    return XY;
+   rgb[0] = XY[0];
+   rgb[1] = XY[1];
+   rgb[2] = XY[2];
  
 }
 
@@ -1109,10 +1054,10 @@ void MainWindow::BilinearInterpolation(QImage *image, double colPixel, double ro
     }
 
     GetNeighbouringPixelPositionAndWeight(image, colPixel, rowPixel, position, pixelWeight);
-    double* imageRGB = GetPixelValueByInterpolation(colPixel, rowPixel, pixelWeight);
+    GetPixelValueByInterpolation(colPixel, rowPixel, pixelWeight, rgb);
 
-    for(int i=0; i< 3; i++)
-        rgb[i] = imageRGB[i];
+    //for(int i=0; i< 3; i++)
+      //  rgb[i] = imageRGB[i];
 }
 
 // Here is some sample code for rotating an image.  I assume orien is in degrees.
@@ -1161,195 +1106,223 @@ void MainWindow::RotateImage(QImage *image, double orien)
 
 }
 
+void setPixelOrientation(double* orientationIndegree, double orientationInRadian ) {
+     double orient = (double)((orientationInRadian / M_PI * 180.0));   
 
+     double degreeafterdecimal = orient - (int) orient;
+     *orientationIndegree = degreeafterdecimal +( (180 + (int)orient) %(int)(180));
+}
 
-void GetNonMaximumSupression(QImage* image, double row, double col, int rowPixel, int colPixel, double* magnitude, double thres ) {
+void GetPixelWeightforPeakEdge(QImage* image, double** magnitude, const Position& pixelPosition, double* pixelWeight) {
+
+    int edgePixelCol = pixelPosition.YPixelPos;
+    int edgePixelRow = pixelPosition.XPixelPos;
+
+    if((edgePixelCol) < 0 || (edgePixelCol)> (image->width()-1))
+        edgePixelCol = GetPixelPositionForEdges(edgePixelCol,image->width()-1);
+    if((edgePixelRow) < 0 || (edgePixelRow)> (image->height()-1)) 
+        edgePixelRow = GetPixelPositionForEdges(edgePixelRow,image->height()-1);
+                 
+
+    double value = magnitude[edgePixelRow][edgePixelCol];
+         
+    pixelWeight[0] = value;
+    pixelWeight[1] = value;
+    pixelWeight[2] = value;
+}
+
+void GetNeighbouringPixelPositionAndWeight(QImage *image, double** magnitude, double colPixel, double rowPixel, Position* position, double** pixelWeight) {
+    int colPixel1 = (int) ((colPixel));
+    int rowPixel1 = (int) ((rowPixel));
+
+    position[0] = Position(rowPixel1,colPixel1);
+    GetPixelWeightforPeakEdge(image, magnitude, Position(rowPixel1,colPixel1), pixelWeight[0]);
+
+    position[1] = Position(rowPixel1,colPixel1+1);
+    GetPixelWeightforPeakEdge(image, magnitude, Position(rowPixel1,colPixel1+1), pixelWeight[1]);
+
+    position[2] = Position(rowPixel1+1,colPixel1);
+    GetPixelWeightforPeakEdge(image, magnitude, Position(rowPixel1+1,colPixel1), pixelWeight[2]);
+
+    position[3] = Position(rowPixel1+1,colPixel1+1);
+    GetPixelWeightforPeakEdge(image, magnitude, Position(rowPixel1+1,colPixel1+1), pixelWeight[3]);
+}
+
+void GetNonMaximumSupression(QImage* image, double** magnitude, double rowPixel, double colPixel, double* imageRGB ) {
 
        // Add your code here.  Return the RGB values for the pixel at location (x,y) in double rgb[3].
     Position* position = new Position[4];
-    double rgb[3] = {0.0};
     double** pixelWeight = new double*[4](); 
     for(int i=0; i< 4; i++)
         pixelWeight[i] = new double[3];
 
-     double* E0imageRGB;
-      double* E1imageRGB;
        
-    /*if( colPixel < 0 || rowPixel < 0 || colPixel > (image->width() -1) || rowPixel > (image->height() -1)) {
-        rgb[0] = 0; rgb[1] =0; rgb[2]=0; 
-        return;
-    }*/
-
-    GetNeighbouringPixelPositionAndWeight(image, colPixel + col, rowPixel + row, position, pixelWeight);
-    E0imageRGB = GetPixelValueByInterpolation(colPixel + col, rowPixel + row, pixelWeight);
-
-     GetNeighbouringPixelPositionAndWeight(image, colPixel -col, rowPixel -row, position, pixelWeight);
-     E1imageRGB = GetPixelValueByInterpolation(colPixel-col, rowPixel-row, pixelWeight);
-
-    double E0magnitude = (E0imageRGB[0]+E0imageRGB[1]+E0imageRGB[2])/3;
-    double E1magnitude = (E1imageRGB[0]+E1imageRGB[1]+E1imageRGB[2])/3;
-   
-    if((*magnitude > E0magnitude) && (*magnitude > E1magnitude) && (*magnitude > thres))
-        *magnitude = 255;
-    else 
-        *magnitude = 0;
-       
+    GetNeighbouringPixelPositionAndWeight(image, magnitude, colPixel, rowPixel , position, pixelWeight);
+    GetPixelValueByInterpolation(colPixel , rowPixel , pixelWeight, imageRGB);
 }
 
-void findPeaksSobel(const ImageMetaData& metaData, QImage* inputImage, QImage& outputImageBuffer,SobelKernel& kernel,double thres) {
-     double* imageRGB                        =   new double[3]();
-    int radius                              =   1;
-    double** tempStorageHorizConvolution    =   new double*[kernel.KernelSize](); 
-
-    double XKernel[3] = {1, 0, -1};
-    double Ykernel[3] = {1, 2, 1};
-
-    double Gx, Gy; 
+void findPeaksSobel(const ImageMetaData& metaData, QImage* inputImage, SobelKernel& kernel, double thres) {
+    
     double** magnitude = new double*[metaData.Height];
-    int** orientation = new int*[metaData.Height];
-
-    double mag, orient;
-
+    int** tempmagnitude = new int*[metaData.Height];
+    double** orientation = new double*[metaData.Height];
+  
     for(int i=0; i< metaData.Height; i++){
         magnitude[i] = new double[metaData.Width];
-        orientation[i] = new int[metaData.Width];
+        orientation[i] = new double[metaData.Width];
+        tempmagnitude[i] = new int[metaData.Width];
     }
 
-    for(int i=0; i<kernel.KernelSize; i++) 
-        tempStorageHorizConvolution[i] = new double[3];
-    
+    for(int i=0; i< metaData.Height; i++)
+        for(int j=0; j< metaData.Width; j++)
+            tempmagnitude[i][j] = 0;
+
+    double* imageRGB                        =   new double[3]();
+    int radius                              =   metaData.radius;
+    double* tempStorageHorizConvolution    =   new double[kernel.KernelSize]();
+    double Gx, Gy, mag, orient;
+
+    double XKernel[3][3] = {{-1,0,1},{-2,0,2},{-1,0,1}};
+    double YKernel[3][3] = {{-1, -2, -1}, {0,0,0},{1, 2, 1}};
+
+    QImage tempImage = inputImage->copy(); 
+
+    QRgb pixel;
+
     for(int rowPixel = 0; rowPixel < metaData.Height; rowPixel++) { // X
         for(int colPixel = 0; colPixel < metaData.Width; colPixel++) { // Y
+            pixel = inputImage->pixel(colPixel, rowPixel);
+            int grayScale = (qRed(pixel) + qGreen(pixel) + qBlue(pixel))/3;
+            //int grayScale = qGray(pixel);
+            tempImage.setPixel(colPixel, rowPixel, qRgb((int)floor(grayScale), (int)floor(grayScale), (int)floor(grayScale)));
+        }
+    }
 
-           
+    int rowEdgePixel, colEdgePixel;
+    int max_s = 0;
 
-            ResetValues(imageRGB, tempStorageHorizConvolution, kernel.KernelSize);
-            ApplyHorizontalFilterToPixelAndReturnRGB(outputImageBuffer, tempStorageHorizConvolution, XKernel, Position(rowPixel,colPixel),radius);
-            ApplyVerticalFilterToPixelAndReturnRGB(imageRGB, tempStorageHorizConvolution, Ykernel, radius);
+      for(int rowPixel = 0; rowPixel < metaData.Height; rowPixel++) { // X
+        for(int colPixel = 0; colPixel < metaData.Width; colPixel++) { // Y
 
-            Gx = (int) floor(imageRGB[0] + imageRGB[1] + imageRGB[2]);
-           /* red = abs(imageRGB[0]);
-            green = abs(imageRGB[1]);
-            blue = abs(imageRGB[2]);*/
+            Gx = 0.0; Gy = 0.0;
 
-            Gx = Gx/3;
+            for(int row = -1; row < 2; row++) {
+                for(int col = -1; col < 2; col++) {
 
-            ResetValues(imageRGB, tempStorageHorizConvolution, kernel.KernelSize);
-            ApplyHorizontalFilterToPixelAndReturnRGB(outputImageBuffer, tempStorageHorizConvolution, Ykernel, Position(rowPixel,colPixel),radius);
-            ApplyVerticalFilterToPixelAndReturnRGB(imageRGB, tempStorageHorizConvolution, XKernel, radius);
+                    colEdgePixel = colPixel + col;
+                    rowEdgePixel = rowPixel + row;
 
-           /* red += abs(imageRGB[0]);
-            green += abs(imageRGB[1]);
-            blue += abs(imageRGB[2]);*/
+                     if((colEdgePixel) < 0 || (colEdgePixel) > (metaData.Width-1)) 
+                        colEdgePixel = GetPixelPositionForEdges(colEdgePixel,metaData.Width-1);
+                     if((rowEdgePixel) < 0 || (rowEdgePixel) > (metaData.Height-1))
+                         rowEdgePixel = GetPixelPositionForEdges(rowEdgePixel,metaData.Height-1);
+                 
+                        pixel = tempImage.pixel(colEdgePixel, rowEdgePixel);
 
-            Gy = (int) floor(imageRGB[0] + imageRGB[1] + imageRGB[2]);
-            Gy = Gy / 3;
+                        double weight = XKernel[row+1][col+1];
+                        Gx += (double)(qRed(pixel)) * weight;
 
-             
-                
-            mag = sqrt(Gx*Gx + Gy*Gy);
+                        weight = YKernel[row+1][col+1];
+                        Gy += (double)(qRed(pixel)) * weight;
+                }
+            }
+            
+            mag = sqrt(Gx * Gx + Gy * Gy);
             magnitude[rowPixel][colPixel] = mag;
+            max_s = max((double)max_s, mag);
 
-            orient = atan2( Gy , Gx );
+            orient = atan2f(Gy, Gx);
+            setPixelOrientation(&(orientation[rowPixel][colPixel]), orient);
+        }
+      }
 
-           // double value = Gx + Gy;
-           /* double red = (sin(orient) + 1.0)/2.0;
-            double green = (cos(orient) + 1.0)/2.0;
-            double blue = 1.0 - red - green;*/
-             
-            /*red *= mag*4.0;
-            green *= mag*4.0;
-            blue *= mag*4.0;*/
-
-            // Make sure the pixel values range from 0 to 255
-            /*red = min(255.0, max(0.0, red));
-            green = min(255.0, max(0.0, green));
-            blue = min(255.0, max(0.0, blue));*/
-
-            orient = (int)(180 + (orient / M_PI * 180.0));   
-
-            if(orient >= 0 && orient <=45)
-                orientation[rowPixel][colPixel] = 0;
-            else if(orient > 45 && orient <= 90)
-                orientation[rowPixel][colPixel] = 45;
-            else if(orient > 90 && orient <= 135)
-                orientation[rowPixel][colPixel] = 90;
-            else if(orient > 135 && orient <= 180)
-                orientation[rowPixel][colPixel] = 135;
-
-             double red = mag*4.0;
-             double green = mag*4.0;
-             double blue = mag*4.0;
-
-    // Make sure the pixel values range from 0 to 255
-            red = min(255.0, max(0.0, red));
-            green = min(255.0, max(0.0, green));
-            blue = min(255.0, max(0.0, blue));
-
-    inputImage->setPixel(colPixel, rowPixel, qRgb( (int) (red), (int) (green), (int) (blue)));
-     //inputImage->setPixel(colPixel, rowPixel, qRgb( (int) (value), (int) (value), (int) (value)));
+          
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-        }    
-}
-    delete imageRGB;
-    imageRGB = NULL;
-    
-    for(int i=0; i< kernel.KernelSize ; i++)
-        delete tempStorageHorizConvolution[i];
+      double* newRowPixel = new double[181];
+      double* newColPixel = new double[181];
 
+      //////////////////////////// CalculatePixel Position of radius 1 along 180 degree /////////////////////////////
+      for(int degree = 0; degree <= 180; ++degree)
+	 	{
+            double angle = degree*M_PI/180;
+		 	newColPixel[degree] = (float)cos(angle);	
+		 	newRowPixel[degree] = (float)sin(angle);	
+     	 } // for i
+		newColPixel[180] = 0.f;
+		newRowPixel[90] = 0.f;
 
+        double*  pixelMagnitude = NULL;
+        
+
+    /////////////////// iterate through each and every pixel ///////////////////////////////////////////////////////////////
      for(int rowPixel = 0; rowPixel < metaData.Height; rowPixel++) { // X
         for(int colPixel = 0; colPixel < metaData.Width; colPixel++) { // Y
 
-            switch(orientation[rowPixel][colPixel]) {
-            case 0 :
-                GetNonMaximumSupression(inputImage,0,1, rowPixel, colPixel, &magnitude[rowPixel][colPixel], thres);
-                break;
-            case 45 :
-                GetNonMaximumSupression(inputImage,(double)-1/(double)sqrtf(2),(double)1/(double)sqrtf(2), rowPixel, colPixel,&magnitude[rowPixel][colPixel], thres);
-                break;
-            case 90:
-                GetNonMaximumSupression(inputImage,1,0, rowPixel, colPixel, &magnitude[rowPixel][colPixel], thres);
-                break;
-            case 135:
-                GetNonMaximumSupression(inputImage,(double)-1/(double)sqrtf(2),(double)-1/(double)sqrtf(2), rowPixel, colPixel, &magnitude[rowPixel][colPixel], thres);
-                break;
-            default:
-                inputImage->setPixel(colPixel, rowPixel, qRgb(0,0,0));
-                break;
+            pixelMagnitude       =   &(magnitude[rowPixel][colPixel]);
+            int     pixelOrientation    =       orientation[rowPixel][colPixel];
+            double newrow, newcol;
+
+            int rowsign = 0, colsign = 0;
+
+            if(*pixelMagnitude > thres ){
+                
+                    newrow = rowPixel - newRowPixel[pixelOrientation];
+                    newcol = colPixel + newColPixel[pixelOrientation];
+
+                GetNonMaximumSupression(inputImage, magnitude,newrow, newcol, imageRGB);
+                double magvalue = imageRGB[0];
+
+                if(*pixelMagnitude > magvalue) {
+    
+                    newrow = rowPixel + newRowPixel[pixelOrientation];
+                    newcol = colPixel - newColPixel[pixelOrientation];
+          
+                    ResetValues(imageRGB, NULL, 0);
+                    GetNonMaximumSupression(inputImage, magnitude, newrow, newcol, imageRGB);
+
+                    magvalue = imageRGB[0];
+
+                    if( *pixelMagnitude > magvalue) {
+                        tempmagnitude[rowPixel][colPixel] = 255;
+                    } 
+                }
             }
             
         }
      }
-
-      for(int rowPixel = 0; rowPixel < metaData.Height; rowPixel++) { // X
-        for(int colPixel = 0; colPixel < metaData.Width; colPixel++) { // Y
-            if(magnitude[rowPixel][colPixel] == 255)
-                inputImage->setPixel(colPixel, rowPixel, qRgb(255,255,255));
-            else
-                inputImage->setPixel(colPixel, rowPixel, qRgb(0,0,0));
+     
+           
+     for(int rowpixel = 0; rowpixel < metaData.Height; rowpixel++) { // x
+         for(int colpixel = 0; colpixel < metaData.Width; colpixel++) { // y 
+             double pixelmag = tempmagnitude[rowpixel][colpixel];
+             if(pixelmag == 255)
+                 inputImage->setPixel(colpixel, rowpixel, qRgb(pixelmag, pixelmag, pixelmag));
+             else
+                 inputImage->setPixel(colpixel, rowpixel, qRgb(0, 0, 0));
         }
-      }
+      } 
 }
 
 void MainWindow::FindPeaksImage(QImage *image, double thres)
 {
-     double XSobelKernel[3][3] = {{1,0,-1},{2,0,-2},{1,0,-1}};
+
+    
+    // Add your code here.
+    double XSobelKernel[3][3] = {{1,0,-1},{2,0,-2},{1,0,-1}};
     double YSobelKernel[3][3] = {{1,2,1},{0,0,0},{-1,-2,-1}};
 
     double sigma = double(1) / double(3);
-
-    ImageMetaData metaData(0,0,0); 
+    ImageMetaData metaData(0,0,0);
     SobelKernel sobelKernel(0,NULL,NULL);
-     GaussianKernel gaussianKernel(0,(double)1/(double)3,NULL);
-   
-    QImage OutPutImageBuffer        =       InitializeOutputImageBuffer(image,sigma,metaData);
+  
+    metaData.Height = image->height();
+    metaData.Width = image->width();
+    metaData.radius = 1;
+
     GetSobelKernel(sobelKernel);
-    //GaussianBlurImage(image,2);
-    ApplySobelFilterToImage(metaData, image, OutPutImageBuffer, sobelKernel);
-    OutPutImageBuffer        =       InitializeOutputImageBuffer(image,sigma,metaData);
-    findPeaksSobel(metaData,image,OutPutImageBuffer, sobelKernel,thres);
+    findPeaksSobel(metaData,image, sobelKernel,thres);
     // Add your code here.
 }
 

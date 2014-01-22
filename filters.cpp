@@ -28,7 +28,7 @@ void MainWindow::BlackWhiteImage(QImage *image)
         {
             pixel = image->pixel(c, r);
             double red = (double) qRed(pixel);
-            double green = (double) qGreen(pixel);
+            double green = (double) qGreen(pixel); 
             double blue = (double) qBlue(pixel);
 
             // Compute intensity from colors - these are common weights

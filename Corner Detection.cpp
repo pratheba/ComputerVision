@@ -688,6 +688,48 @@ void MainWindow::HarrisCornerDetector(QImage image, double sigma, double thres, 
 }
 
 
+
+void FindClosestDescriptor(CIntPt *interestPts1, int numInterestsPts1,CIntPt *interestPts2, int numInterestsPts2, CMatches **matches) {
+
+    // Using L1 Norm
+
+    int numMatches = MAXINT;
+    double l1norm = 0.0;
+    int* matchingPoints = new int[numInterestsPts1];
+
+    int numberOfMatching = 0;
+
+     // Once you uknow the number of matches allocate an array as follows:
+     *matches = new CMatches [numInterestsPts1];
+    //
+    // The position of the interest point in iamge 1 is (m_X1, m_Y1)
+    // The position of the interest point in image 2 is (m_X2, m_Y2)
+
+
+   for(int num1 = 0; num1 < numInterestsPts1 ; num1++) {
+        numMatches = MAXINT;
+       
+
+       for(int num2 = 0; num2 < numInterestsPts2; num2++) {
+            l1norm = 0.0;
+           for(int descPts = 0; descPts < 8; descPts++)
+               l1norm += abs(interestPts1[num1].m_Desc[descPts] - interestPts2[num2].m_Desc[descPts]);
+
+           if(l1norm < numMatches) {
+               numMatches = l1norm;
+               matchingPoints[num1] = num2;
+           }
+       }
+
+       (*matches)[num1].m_X1 = interestPts1[num1].m_X;
+       (*matches)[num1].m_Y1 = interestPts1[num1].m_Y;
+       (*matches)[num1].m_X2 = interestPts2[matchingPoints[num1]].m_X;
+       (*matches)[num1].m_Y2 = interestPts2[matchingPoints[num1]].m_Y;
+   }
+
+   
+}
+
 /*******************************************************************************
 Find matching interest points between images.
     image1 - first input image
@@ -715,12 +757,16 @@ void MainWindow::MatchInterestPoints(QImage image1, CIntPt *interestPts1, int nu
 
     // Add your code here for finding the best matches for each point.
 
+    // Find Closest Descriptor
+
+    FindClosestDescriptor(interestPts1, numInterestsPts1,  interestPts2, numInterestsPts2, matches);
     // Once you uknow the number of matches allocate an array as follows:
     // *matches = new CMatches [numMatches];
     //
     // The position of the interest point in iamge 1 is (m_X1, m_Y1)
     // The position of the interest point in image 2 is (m_X2, m_Y2)
 
+    numMatches = numInterestsPts1;
     // Draw the matches
     DrawMatches(*matches, numMatches, image1Display, image2Display);
 }

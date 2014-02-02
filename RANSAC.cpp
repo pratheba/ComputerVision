@@ -739,7 +739,8 @@ void FindClosestDescriptor(CIntPt *interestPts1, int numInterestsPts1,CIntPt *in
 
     int numMatches = MAXINT;
     double l1norm = 0.0;
-    int* matchingPoints = new int[numInterestsPts1];
+   // int* matchingPoints = new int[numInterestsPts1];
+    int matchingPoint = -1;
 
     int numberOfMatching = 0;
 
@@ -761,14 +762,15 @@ void FindClosestDescriptor(CIntPt *interestPts1, int numInterestsPts1,CIntPt *in
 
            if(l1norm < numMatches) {
                numMatches = l1norm;
-               matchingPoints[num1] = num2;
+               matchingPoint = num2;
+              // matchingPoints[num1] = num2;
            }
        }
 
        (*matches)[num1].m_X1 = interestPts1[num1].m_X;
        (*matches)[num1].m_Y1 = interestPts1[num1].m_Y;
-       (*matches)[num1].m_X2 = interestPts2[matchingPoints[num1]].m_X;
-       (*matches)[num1].m_Y2 = interestPts2[matchingPoints[num1]].m_Y;
+       (*matches)[num1].m_X2 = interestPts2[matchingPoint].m_X;//[matchingPoints[num1]].m_X;
+       (*matches)[num1].m_Y2 = interestPts2[matchingPoint].m_Y;//[matchingPoints[num1]].m_Y;
    }
 
    
@@ -959,9 +961,74 @@ Bilinearly interpolate image (helper function for Stitch)
 
     You can just copy code from previous assignment.
 *******************************************************************************/
-bool MainWindow::BilinearInterpolation(QImage *image, double x, double y, double rgb[3])
+
+double* GetIntermediatePixelValueByInterpolation(double influenceOfPixel1, double influenceOfPixel2, 
+                                              double* pixel1Weight, double* pixel2Weight) {
+    
+    double* imageRGB = new double[3];
+    imageRGB[0] = influenceOfPixel1 * pixel2Weight[0] + influenceOfPixel2 * pixel1Weight[0];
+    imageRGB[1] = influenceOfPixel1 * pixel2Weight[1] + influenceOfPixel2 * pixel1Weight[1];
+    imageRGB[2] = influenceOfPixel1 * pixel2Weight[2] + influenceOfPixel2 * pixel1Weight[2];
+
+    return imageRGB;
+}
+
+void GetPixelValueByInterpolation(double colPixel, double rowPixel, double** pixelWeight, double rgb[3]) {
+    int colPixel1 = (int) (floor(colPixel));
+    int rowPixel1 = (int) (floor(rowPixel));
+
+   
+    double* imageRGB = new double[3];
+
+    double influenceOfPixelX1 =  (double)(rowPixel) - (double)(rowPixel1);
+    double influenceOfPixelY1 =  (double)(colPixel) - (double)(colPixel1);
+    double influenceOfPixelX2 =  (double)1 - influenceOfPixelX1;
+    double influenceOfPixelY2 =  (double)1 - influenceOfPixelY1;
+
+    double* XY1 = GetIntermediatePixelValueByInterpolation(influenceOfPixelX1, influenceOfPixelX2, pixelWeight[0], pixelWeight[2]);
+    double* XY2 = GetIntermediatePixelValueByInterpolation(influenceOfPixelX1, influenceOfPixelX2, pixelWeight[1], pixelWeight[3]);
+
+    double* XY =  GetIntermediatePixelValueByInterpolation(influenceOfPixelY1, influenceOfPixelY2, XY1, XY2);
+
+   rgb[0] = XY[0];
+   rgb[1] = XY[1];
+   rgb[2] = XY[2];
+ 
+}
+
+void GetNeighbouringPixelPositionAndWeight(QImage *image, double colPixel, double rowPixel, Position* position, double** pixelWeight) {
+    int colPixel1 = (int) ((colPixel));
+    int rowPixel1 = (int) ((rowPixel));
+
+    position[0] = Position(rowPixel1,colPixel1);
+    GetPixelWeight(image, Position(rowPixel1,colPixel1), pixelWeight[0]);
+
+    position[1] = Position(rowPixel1,colPixel1+1);
+    GetPixelWeight(image, Position(rowPixel1,colPixel1+1), pixelWeight[1]);
+
+    position[2] = Position(rowPixel1+1,colPixel1);
+    GetPixelWeight(image, Position(rowPixel1+1,colPixel1), pixelWeight[2]);
+
+    position[3] = Position(rowPixel1+1,colPixel1+1);
+    GetPixelWeight(image, Position(rowPixel1+1,colPixel1+1), pixelWeight[3]);
+}
+
+bool MainWindow::BilinearInterpolation(QImage *image, double colPixel, double rowPixel, double rgb[3])
 {
     // Add your code here.
+     Position* position = new Position[4];
+    double** pixelWeight = new double*[4](); 
+    for(int i=0; i< 4; i++)
+        pixelWeight[i] = new double[3];
+       
+    if( colPixel < 0 || rowPixel < 0 || colPixel > (image->width() -1) || rowPixel > (image->height() -1)) {
+        rgb[0] = 0; rgb[1] =0; rgb[2]=0; 
+       return true;
+    }
+
+    GetNeighbouringPixelPositionAndWeight(image, colPixel, rowPixel, position, pixelWeight);
+    GetPixelValueByInterpolation(colPixel, rowPixel, pixelWeight, rgb);
+
 
     return true;
 }
@@ -975,6 +1042,9 @@ Stitch together two images using the homography transformation
     homInv - inverse homography transformation (image2 -> image1)
     stitchedImage - returned stitched image
 *******************************************************************************/
+
+
+
 void MainWindow::Stitch(QImage image1, QImage image2, double hom[3][3], double homInv[3][3], QImage &stitchedImage)
 {
     // Width and height of stitchedImage
@@ -983,9 +1053,71 @@ void MainWindow::Stitch(QImage image1, QImage image2, double hom[3][3], double h
 
     // Add your code to compute ws and hs here.
 
+    int image2Width = image2.width();
+    int image2Height = image2.height();
+
+    int image1Width = image1.width();
+    int image1Height = image1.height();
+
+    // project four corners of image2 onto image1;
+    double projectedCorner[4][2];
+    Project(0,0,projectedCorner[0][0],projectedCorner[0][1], homInv); // x - column , y - row
+    Project(image2Width-1,0,projectedCorner[1][0],projectedCorner[1][1], homInv);
+    Project(0,image2Height-1,projectedCorner[2][0],projectedCorner[2][1], homInv);
+    Project(image2Width-1,image2Height-1,projectedCorner[3][0],projectedCorner[3][1], homInv);
+
+   // compare each corner of image1, with all corners of image 2.
+
+    double min_height = (double)min(0,min((int)floor(projectedCorner[0][1]), min((int)floor(projectedCorner[1][1]), min((int)floor(projectedCorner[2][1]), (int)floor(projectedCorner[3][1])))));
+    double max_height = (double)max(image1Height, max((int)ceil(projectedCorner[0][1]), max((int)ceil(projectedCorner[1][1]), max((int)ceil(projectedCorner[2][1]), (int)ceil(projectedCorner[3][1])))));
+    double min_width  = (double)min(0,min((int)floor(projectedCorner[0][0]), min((int)floor(projectedCorner[1][0]), min((int)floor(projectedCorner[2][0]), (int)floor(projectedCorner[3][0])))));
+    double max_width  = (double)max(image1Width,max((int)ceil(projectedCorner[0][0]), max((int)ceil(projectedCorner[1][0]), max((int)ceil(projectedCorner[2][0]), (int)ceil(projectedCorner[3][0])))));
+
+   /* double min_height = (double)min((int)floor(projectedCorner[0][1]), min((int)floor(projectedCorner[1][1]), min((int)floor(projectedCorner[2][1]), (int)floor(projectedCorner[3][1]))));
+    double max_height = (double)max((int)ceil(projectedCorner[0][1]), max((int)ceil(projectedCorner[1][1]), max((int)ceil(projectedCorner[2][1]), (int)ceil(projectedCorner[3][1]))));
+    double min_width  = (double)min((int)floor(projectedCorner[0][0]), min((int)floor(projectedCorner[1][0]), min((int)floor(projectedCorner[2][0]), (int)floor(projectedCorner[3][0]))));
+    double max_width  = (double)max((int)ceil(projectedCorner[0][0]), max((int)ceil(projectedCorner[1][0]), max((int)ceil(projectedCorner[2][0]), (int)ceil(projectedCorner[3][0]))));
+*/
+
+
+    ws = abs(max_width - min_width);
+    hs = abs(max_height - min_height);
+
+
     stitchedImage = QImage(ws, hs, QImage::Format_RGB32);
     stitchedImage.fill(qRgb(0,0,0));
 
     // Add you code to warp image1 and image2 to stitchedImage here.
+    double Xprojectedvalue;
+    double Yprojectedvalue;
+  
+
+    // copying image1 onto stiched imge
+
+    /*for(int rowPixel = 0; rowPixel < image1Height; rowPixel++) {
+        for(int colPixel = 0; colPixel < image1Width; colPixel++) {
+            QRgb pixel = image1.pixel(colPixel, rowPixel);
+            stitchedImage.setPixel(colPixel+abs(min_width), rowPixel+abs(min_height), qRgb((int)floor(qRed(pixel)), (int)floor(qGreen(pixel)), (int)floor(qBlue(pixel))));
+        }
+    }*/
+
+    //// projecting stitched image onto image2
+    double rgb[3];
+    for(int rowPixel = 0; rowPixel < hs; rowPixel++) {
+        for(int colPixel = 0; colPixel < ws; colPixel++) {
+            Project(colPixel, rowPixel, Xprojectedvalue, Yprojectedvalue, hom);
+         
+            if(Xprojectedvalue >= 0 && Xprojectedvalue < image2Width && Yprojectedvalue >=0 && Yprojectedvalue < image2Height) {
+                BilinearInterpolation(&image2, Xprojectedvalue,Yprojectedvalue, rgb);
+                if(rowPixel > min_height)
+                    stitchedImage.setPixel(colPixel, rowPixel, qRgb((int)floor(rgb[0]), (int)floor(rgb[1]), (int)floor(rgb[2])));
+                else
+                    stitchedImage.setPixel(colPixel  , rowPixel  + abs(min_width), qRgb((int)floor(rgb[0]), (int)floor(rgb[1]), (int)floor(rgb[2])));  
+            }
+        }
+      }
+
+
+
 }
 

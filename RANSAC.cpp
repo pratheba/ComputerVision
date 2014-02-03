@@ -885,12 +885,16 @@ void MainWindow::RANSAC(CMatches *matches, int numMatches, int numIterations, do
     std::vector<int> randomNumber;
     CMatches *subsetmatches = new CMatches[4];
 
+    double tempHomography[3][3];
     double bestHomography[3][3];
     int numOfInliers = 0.0;
     // Picking 4 random numbers
 
     for(int iter = 0; iter < numIterations; iter++) {
         randomNumber.clear();
+        for(int i=0; i< 3; i++)
+            for(int j=0; j< 3; j++)
+                tempHomography[i][j] = 0.0;
         
         while(1) {
             int random =  (rand() % (numMatches -1));
@@ -911,14 +915,15 @@ void MainWindow::RANSAC(CMatches *matches, int numMatches, int numIterations, do
         subsetmatches[random] = matches[randomNumber[random]];
     }
 
-    ComputeHomography(subsetmatches, 4, hom, true);
-    int currInlier = ComputeInlierCount(hom, matches, numMatches, inlierThreshold);
+    ComputeHomography(subsetmatches, 4, tempHomography, true);
+    int currInlier = ComputeInlierCount(tempHomography, matches, numMatches, inlierThreshold);
     if( currInlier > numOfInliers) {
         for(int i=0; i< 3; i++)
             for(int j=0; j< 3; j++)
-                bestHomography[i][j] = hom[i][j];
+                bestHomography[i][j] = tempHomography[i][j];
         numOfInliers = currInlier;
     }
+
     }
 
      numOfInliers = ComputeInlierCount(bestHomography, matches, numMatches, inlierThreshold);
@@ -942,7 +947,7 @@ void MainWindow::RANSAC(CMatches *matches, int numMatches, int numIterations, do
             inliers[inliercount] = matches[num];
             inliercount++;
         }
-            totalInliers++;
+           // totalInliers++;
     }
 
     ComputeHomography(inliers, inliercount, hom, true);
@@ -950,6 +955,9 @@ void MainWindow::RANSAC(CMatches *matches, int numMatches, int numIterations, do
 
     // After you're done computing the inliers, display the corresponding matches.
     DrawMatches(inliers, inliercount, image1Display, image2Display);
+
+    delete[] subsetmatches;
+    delete[] inliers;
 
 }
 
@@ -977,9 +985,6 @@ void GetPixelValueByInterpolation(double colPixel, double rowPixel, double** pix
     int colPixel1 = (int) (floor(colPixel));
     int rowPixel1 = (int) (floor(rowPixel));
 
-   
-    double* imageRGB = new double[3];
-
     double influenceOfPixelX1 =  (double)(rowPixel) - (double)(rowPixel1);
     double influenceOfPixelY1 =  (double)(colPixel) - (double)(colPixel1);
     double influenceOfPixelX2 =  (double)1 - influenceOfPixelX1;
@@ -993,6 +998,8 @@ void GetPixelValueByInterpolation(double colPixel, double rowPixel, double** pix
    rgb[0] = XY[0];
    rgb[1] = XY[1];
    rgb[2] = XY[2];
+
+   delete XY1; delete XY2; delete XY;
  
 }
 
@@ -1029,7 +1036,9 @@ bool MainWindow::BilinearInterpolation(QImage *image, double colPixel, double ro
     GetNeighbouringPixelPositionAndWeight(image, colPixel, rowPixel, position, pixelWeight);
     GetPixelValueByInterpolation(colPixel, rowPixel, pixelWeight, rgb);
 
-
+    delete[] position;
+    for(int i=0; i< 4; i++)
+        delete[] pixelWeight[i];
     return true;
 }
 
@@ -1073,13 +1082,7 @@ void MainWindow::Stitch(QImage image1, QImage image2, double hom[3][3], double h
     double min_width  = (double)min(0,min((int)floor(projectedCorner[0][0]), min((int)floor(projectedCorner[1][0]), min((int)floor(projectedCorner[2][0]), (int)floor(projectedCorner[3][0])))));
     double max_width  = (double)max(image1Width,max((int)ceil(projectedCorner[0][0]), max((int)ceil(projectedCorner[1][0]), max((int)ceil(projectedCorner[2][0]), (int)ceil(projectedCorner[3][0])))));
 
-   /* double min_height = (double)min((int)floor(projectedCorner[0][1]), min((int)floor(projectedCorner[1][1]), min((int)floor(projectedCorner[2][1]), (int)floor(projectedCorner[3][1]))));
-    double max_height = (double)max((int)ceil(projectedCorner[0][1]), max((int)ceil(projectedCorner[1][1]), max((int)ceil(projectedCorner[2][1]), (int)ceil(projectedCorner[3][1]))));
-    double min_width  = (double)min((int)floor(projectedCorner[0][0]), min((int)floor(projectedCorner[1][0]), min((int)floor(projectedCorner[2][0]), (int)floor(projectedCorner[3][0]))));
-    double max_width  = (double)max((int)ceil(projectedCorner[0][0]), max((int)ceil(projectedCorner[1][0]), max((int)ceil(projectedCorner[2][0]), (int)ceil(projectedCorner[3][0]))));
-*/
-
-
+   
     ws = abs(max_width - min_width);
     hs = abs(max_height - min_height);
 
@@ -1094,30 +1097,25 @@ void MainWindow::Stitch(QImage image1, QImage image2, double hom[3][3], double h
 
     // copying image1 onto stiched imge
 
-    /*for(int rowPixel = 0; rowPixel < image1Height; rowPixel++) {
+    for(int rowPixel = 0; rowPixel < image1Height; rowPixel++) {
         for(int colPixel = 0; colPixel < image1Width; colPixel++) {
             QRgb pixel = image1.pixel(colPixel, rowPixel);
             stitchedImage.setPixel(colPixel+abs(min_width), rowPixel+abs(min_height), qRgb((int)floor(qRed(pixel)), (int)floor(qGreen(pixel)), (int)floor(qBlue(pixel))));
         }
-    }*/
+    }
 
     //// projecting stitched image onto image2
-    double rgb[3];
-    for(int rowPixel = 0; rowPixel < hs; rowPixel++) {
-        for(int colPixel = 0; colPixel < ws; colPixel++) {
+  
+     double rgb[3];
+     for(int rowPixel = min_height; rowPixel < max_height; rowPixel++) {
+         for(int colPixel = min_width; colPixel < max_width; colPixel++) {
             Project(colPixel, rowPixel, Xprojectedvalue, Yprojectedvalue, hom);
-         
-            if(Xprojectedvalue >= 0 && Xprojectedvalue < image2Width && Yprojectedvalue >=0 && Yprojectedvalue < image2Height) {
+            
+            if(Xprojectedvalue >= 0 && Xprojectedvalue < image2Width && Yprojectedvalue >= 0 && Yprojectedvalue < image2Height) {
                 BilinearInterpolation(&image2, Xprojectedvalue,Yprojectedvalue, rgb);
-                if(rowPixel > min_height)
-                    stitchedImage.setPixel(colPixel, rowPixel, qRgb((int)floor(rgb[0]), (int)floor(rgb[1]), (int)floor(rgb[2])));
-                else
-                    stitchedImage.setPixel(colPixel  , rowPixel  + abs(min_width), qRgb((int)floor(rgb[0]), (int)floor(rgb[1]), (int)floor(rgb[2])));  
+                stitchedImage.setPixel(colPixel +abs(min_width) , rowPixel + abs(min_height), qRgb((int)floor(rgb[0]), (int)floor(rgb[1]), (int)floor(rgb[2])));  
             }
         }
       }
-
-
-
 }
 
